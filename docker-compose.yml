@@ -1,0 +1,249 @@
+---
+version: '3'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.4.0-beta1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-enterprise-kafka:5.4.0-beta1
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+    # "`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-
+    # An important note about accessing Kafka from clients on other machines:
+    # -----------------------------------------------------------------------
+    #
+    # The config used here exposes port 9092 for _external_ connections to the broker
+    # i.e. those from _outside_ the docker network. This could be from the host machine
+    # running docker, or maybe further afield if you've got a more complicated setup.
+    # If the latter is true, you will need to change the value 'localhost' in
+    # KAFKA_ADVERTISED_LISTENERS to one that is resolvable to the docker host from those
+    # remote clients
+    #
+    # For connections _internal_ to the docker network, such as from other services
+    # and components, use kafka:29092.
+    #
+    # See https://rmoff.net/2018/08/02/kafka-listeners-explained/ for details
+    # "`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-'"`-._,-
+    #
+      - 9092:9092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 100
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+      CONFLUENT_METRICS_REPORTER_ZOOKEEPER_CONNECT: zookeeper:2181
+      CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      CONFLUENT_METRICS_ENABLE: 'true'
+      CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:5.4.0-beta1
+    container_name: schema-registry
+    ports:
+      - "8081:8081"
+    depends_on:
+      - zookeeper
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
+
+  ksql-server:
+    image: confluentinc/cp-ksql-server:5.4.0-dist-1
+    container_name: ksql-server
+    ports:
+      - 8088:8088
+    depends_on:
+      - kafka
+    environment:
+      KSQL_BOOTSTRAP_SERVERS: kafka:29092
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_KSQL_SERVICE_ID: confluent_rmoff_01
+      KSQL_CUB_KAFKA_TIMEOUT: 300
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # -v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+      # Useful settings for development/laptop use - modify as needed for Prod
+      KSQL_KSQL_COMMIT_INTERVAL_MS: 2000
+      # KSQL_KSQL_SINK_PARTITIONS: 1
+      KSQL_KSQL_CACHE_MAX_BYTES_BUFFERING: 10000000
+      KSQL_KSQL_STREAMS_AUTO_OFFSET_RESET: earliest
+
+  ksql-cli:
+    image: confluentinc/cp-ksql-cli:5.4.0-beta1
+    container_name: ksql-cli
+    depends_on:
+      - ksql-server
+    entrypoint: /bin/sh
+    tty: true
+
+  kafka-connect-540:
+    image: confluentinc/cp-kafka-connect:5.4.0-beta1
+    container_name: kafka-connect-540
+    depends_on:
+      - zookeeper
+      - kafka
+      - schema-registry
+    ports:
+      - 8083:8083
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: kafka-connect-540
+      CONNECT_CONFIG_STORAGE_TOPIC: _kafka-connect-540-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _kafka-connect-540-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _kafka-connect-540-status
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-01"
+      CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+      CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+
+  # kafka-connect-531:
+  #   image: confluentinc/cp-kafka-connect:5.3.1
+  #   container_name: kafka-connect-531
+  #   depends_on:
+  #     - zookeeper
+  #     - kafka
+  #     - schema-registry
+  #   ports:
+  #     - 18083:8083
+  #   environment:
+  #     CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+  #     CONNECT_REST_PORT: 8083
+  #     CONNECT_GROUP_ID: kafka-connect-531
+  #     CONNECT_CONFIG_STORAGE_TOPIC: _kafka-connect-531-configs
+  #     CONNECT_OFFSET_STORAGE_TOPIC: _kafka-connect-531-offsets
+  #     CONNECT_STATUS_STORAGE_TOPIC: _kafka-connect-531-status
+  #     CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+  #     CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+  #     CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-01"
+  #     CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+  #     CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+  #     CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+  #     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+  #     CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+  #     CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+  #     CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+
+  kafka-connect-530:
+    image: confluentinc/cp-kafka-connect:5.3.0
+    container_name: kafka-connect-530
+    depends_on:
+      - zookeeper
+      - kafka
+      - schema-registry
+    ports:
+      - 28083:8083
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: kafka-connect-530
+      CONNECT_CONFIG_STORAGE_TOPIC: _kafka-connect-530-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _kafka-connect-530-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _kafka-connect-530-status
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-01"
+      CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+      CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+
+  # kafka-connect-522:
+  #   image: confluentinc/cp-kafka-connect:5.2.2
+  #   container_name: kafka-connect-522
+  #   depends_on:
+  #     - zookeeper
+  #     - kafka
+  #     - schema-registry
+  #   ports:
+  #     - 38083:8083
+  #   environment:
+  #     CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
+  #     CONNECT_REST_PORT: 8083
+  #     CONNECT_GROUP_ID: kafka-connect-522
+  #     CONNECT_CONFIG_STORAGE_TOPIC: _kafka-connect-522-configs
+  #     CONNECT_OFFSET_STORAGE_TOPIC: _kafka-connect-522-offsets
+  #     CONNECT_STATUS_STORAGE_TOPIC: _kafka-connect-522-status
+  #     CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+  #     CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+  #     CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+  #     CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-01"
+  #     CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
+  #     CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
+  #     CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
+  #     CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+  #     CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+  #     CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+  #     CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      
+  # elasticsearch5:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:5.6.16
+  #   container_name: elasticsearch5
+  #   ports:
+  #     - 9200:9200
+  #   environment:
+  #     xpack.security.enabled: "false"
+  #     ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+  #     discovery.type: "single-node"
+  #   # volumes: 
+  #   #   - ./data/container_data/elasticserarch:/usr/share/elasticsearch/data
+
+  elasticsearch6:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.8.3
+    container_name: elasticsearch6
+    ports:
+      - 19200:9200
+    environment:
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      discovery.type: "single-node"
+    # volumes: 
+    #   - ./data/container_data/elasticserarch:/usr/share/elasticsearch/data
+
+  elasticsearch7:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.4.0
+    container_name: elasticsearch7
+    ports:
+      - 29200:9200
+    environment:
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+      discovery.type: "single-node"
+    # volumes: 
+    #   - ./data/container_data/elasticserarch:/usr/share/elasticsearch/data

@@ -1,0 +1,584 @@
+= Testing Kafka and Elasticsearch
+Robin Moffatt <robin@confluent.io>
+v0.01, 9 October 2019
+
+:toc:
+
+Environment was rebuilt after each top-level section. 
+
+== No type name, no template
+
+=== Elasticsearch 7
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-notypename/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-notypename",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+== Elasticsearch <= 6
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es6-notypename/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch6:9200",
+            "type.name": "",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es6-notypename",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+Fails : `"type":"action_request_validation_exception","reason":"Validation Failed: 1: type is missing`
+
+== Type name given, no template 
+
+=== Elasticsearch 7
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-typenamegiven/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-typenamegiven",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+=== Elasticsearch 6
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es6-typenamegiven/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch6:9200",
+            "type.name": "foobarwibble",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es6-typenamegiven",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+
+Templates to define mappings: 
+
+[source,bash]
+----
+docker exec elasticsearch7 curl -s -XPUT "http://localhost:9200/_template/kafkaconnect/" -H 'Content-Type: application/json' -d'
+        {
+          "template": "*",
+          "settings": { "number_of_shards": 1, "number_of_replicas": 0 }, 
+          "mappings": { "dynamic_templates": [ { "dates": { "match": "*_ts", "mapping": { "type": "date" } } } ] }
+        }'
+----
+
+[source,bash]
+----
+docker exec elasticsearch6 curl -s -XPUT "http://localhost:9200/_template/kafkaconnect/" -H 'Content-Type: application/json' -d'
+        {
+          "template": "*",
+          "settings": { "number_of_shards": 1, "number_of_replicas": 0 }, 
+          "mappings": { "_default_": { "dynamic_templates": [ { "dates": { "match": "*_ts", "mapping": { "type": "date" } } } ] } }
+        }'
+----
+
+
+== No type name, template exists
+
+=== Elasticsearch 7
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-notypename-templateexists/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-notypename-templateexists",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+
+✅Works.
+
+=== Elasticsearch <= 6
+
+N/A because `type.name` is mandatory with Elasticsearch <= 6.
+
+== Type name given, template exists
+
+=== Elasticsearch 7
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-typenamegiven-templateexists/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-typenamegiven-templateexists",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+❌Fails:  
+
+```
+kafka-connect-540    | [2019-10-09 10:57:05,746] ERROR [sink-5.4.0-es7-typenamegiven-templateexists|task-0] Encountered an illegal document error when executing batch 3 of 1 records. Error was [{"type":"illegal_argument_exception","reason":"Rejecting mapping update to [sample_topic-5.4.0-es7-typenamegiven-templateexists] as the final mapping would have more than 1 type: [_doc, foobarwibble]"}] (to ignore future records like this change the configuration property 'behavior.on.malformed.documents' from 'fail' to 'ignore'). (io.confluent.connect.elasticsearch.bulk.BulkProcessor:421)
+```
+
+Solution: use blank `type.name`, or use `"type.name": "_doc"`
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-typenamegiven-templateexists/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "_doc",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-typenamegiven-templateexists",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+✅Works.
+
+== Elasticsearch <= 6
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es6-typenamegiven-templateexists/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch6:9200",
+            "type.name": "foobarwibble",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es6-typenamegiven-templateexists",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+✅Works.
+
+== Avro and schemas
+
+Templates to define mappings (these vary from the earlier ones because the field names are uppercase).
+
+[source,bash]
+----
+docker exec elasticsearch7 curl -s -XPUT "http://localhost:9200/_template/kafkaconnect/" -H 'Content-Type: application/json' -d'
+        {
+          "template": "*",
+          "settings": { "number_of_shards": 1, "number_of_replicas": 0 }, 
+          "mappings": { "dynamic_templates": [ { "dates": { "match": "*_TS", "mapping": { "type": "date" } } } ] }
+        }'
+----
+
+[source,bash]
+----
+docker exec elasticsearch6 curl -s -XPUT "http://localhost:9200/_template/kafkaconnect/" -H 'Content-Type: application/json' -d'
+        {
+          "template": "*",
+          "settings": { "number_of_shards": 1, "number_of_replicas": 0 }, 
+          "mappings": { "_default_": { "dynamic_templates": [ { "dates": { "match": "*_TS", "mapping": { "type": "date" } } } ] } }
+        }'
+----
+
+Re-serialise JSON to Avro using KSQL: 
+
+[source,sql]
+----
+CREATE STREAM SAMPLE_JSON
+    (TID  VARCHAR, BATT INTEGER, LON       DOUBLE,  LAT  DOUBLE,
+     TST  BIGINT,  ALT  INTEGER, COG       INTEGER, VEL  INTEGER,
+     P    DOUBLE,  BS   INTEGER, CONN      VARCHAR, ACC  INTEGER,
+     T    VARCHAR, VAC  INTEGER, INREGIONS VARCHAR, TYPE VARCHAR, EVENT_TS BIGINT)
+WITH (KAFKA_TOPIC = 'sample_topic', VALUE_FORMAT='JSON');
+
+CREATE STREAM SAMPLE_AVRO WITH (VALUE_FORMAT='AVRO') AS SELECT * FROM SAMPLE_JSON;
+----
+
+=== Avro - schemas.ignore=true - Elasticsearch 7
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+✅Works.
+
+=== Avro - schemas.ignore=false - Elasticsearch 7
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema-false/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema-false",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+❌Fails : `"type":"action_request_validation_exception","reason":"Validation Failed: 1: mapping type is missing;`
+
+Specify type name as `_doc`: 
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema-false-withtypename/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "_doc",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema-false-withtypename",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+✅Works.
+
+Specify type name as something other than `_doc`: 
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema-false-withtypename2/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema-false-withtypename2",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+❌Doesn't work, because `Rejecting mapping update to [sample_avro-5.4.0-es7-avro-ignore-schema-false-withtypename2] as the final mapping would have more than 1 type: [_doc, foobarwibble]`
+
+Remove the template:
+
+[source,bash]
+----
+docker exec -it elasticsearch7 curl -XDELETE "http://localhost:9200/_template/kafkaconnect"
+----
+
+Retry with `_doc` type.name, no template: 
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema-false-withtypename-no-template/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "_doc",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema-false-withtypename-no-template",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+✅Works.
+
+Retry with non-`_doc` type.name, no template: 
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema-false-withrandomtypename-no-template/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema-false-withrandomtypename-no-template",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+✅Works.
+
+== Wrong deserialisers
+
+=== Reading Avro with JSON converter
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-01/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"org.apache.kafka.connect.json.JsonConverter",
+            "key.converter":"org.apache.kafka.connect.json.JsonConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-sink-5.4.0-es7-01",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+=== Reading JSON with Avro converter
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-01/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "sample_topic",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-sink-5.4.0-es7-01",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+=== Reading String with Avro converter
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-avro-ignore-schema-false-withrandomtypename-no-template/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "foobarwibble",
+            "topics": "SAMPLE_AVRO",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "value.converter":"io.confluent.connect.avro.AvroConverter",
+            "value.converter.schema.registry.url":"http://schema-registry:8081",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-avro-ignore-schema-false-withrandomtypename-no-template",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+== Reading JSON data
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-sample-schemasignore-true/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic2",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-sample-schemasignore-true",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-sample-schemasignore-false-schemasenable-false/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic2",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-sample-schemasignore-false-schemasenable-false",
+            "value.converter":"org.apache.kafka.connect.json.JsonConverter",
+            "value.converter.schemas.enable":"false",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-sample-schemasignore-false-schemasenable-true/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic2",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-sample-schemasignore-false-schemasenable-true",
+            "value.converter":"org.apache.kafka.connect.json.JsonConverter",
+            "value.converter.schemas.enable":"true",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+== Using a stringconverter when you shouldn't
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-string-schemaignore-true/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic2",
+            "key.ignore": "true",
+            "schema.ignore": "true",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "value.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-string-schemaignore-true",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
+
+[source,bash]
+----
+docker exec kafka-connect-540 curl -s -i -X PUT -H  "Content-Type:application/json" \
+    http://localhost:8083/connectors/sink-5.4.0-es7-string-schemaignore-false/config \
+    -d '{
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "connection.url": "http://elasticsearch7:9200",
+            "type.name": "",
+            "topics": "sample_topic2",
+            "key.ignore": "true",
+            "schema.ignore": "false",
+            "key.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "value.converter":"org.apache.kafka.connect.storage.StringConverter",
+            "transforms.renameTopic.regex": "(.*)",
+            "transforms.renameTopic.replacement": "$1-5.4.0-es7-string-schemaignore-false",
+            "transforms.renameTopic.type": "org.apache.kafka.connect.transforms.RegexRouter",
+            "transforms": "renameTopic"
+            }'
+----
+
